@@ -111,54 +111,27 @@
 <script>
     // KONFIGURASI KHUSUS VERCEL (WSS)
     const BROKER = "broker.hivemq.com";
-    const PORT = 8884; // Port Secure WebSocket
+    const PORT = 8884; 
     const CLIENT_ID = "Web_Incubator_" + Math.random().toString(16).substr(2, 5);
     const TOPIC = "incubator/data";
 
+    // Inisialisasi Client
     const client = new Paho.MQTT.Client(BROKER, PORT, "/mqtt", CLIENT_ID);
 
-    const options = {
-        useSSL: true, // WAJIB TRUE untuk HTTPS/Vercel
-        onSuccess: onConnect,
-        onFailure: onConnectFail,
-        keepAliveInterval: 30,
-        reconnect: true
-    };
-
-    function connect() {
-        console.log("Connecting to MQTT...");
-        client.connect(options);
-    }
-
-    function onConnect() {
-        console.log("Connected!");
-        document.getElementById("mqtt_status").innerText = "CONNECTED";
-        document.getElementById("mqtt_status").classList.add("connected");
-        client.subscribe(TOPIC);
-    }
-
-    function onConnectFail(e) {
-        console.log("Connect Failed: ", e);
-        document.getElementById("mqtt_status").innerText = "RECONNECTING...";
-        document.getElementById("mqtt_status").classList.remove("connected");
-        setTimeout(connect, 5000);
-    }
-
+    // Handler jika koneksi putus
     client.onConnectionLost = (responseObject) => {
         document.getElementById("mqtt_status").innerText = "DISCONNECTED";
         document.getElementById("mqtt_status").classList.remove("connected");
-        if (responseObject.errorCode !== 0) {
-            console.log("OnConnectionLost:" + responseObject.errorMessage);
-            setTimeout(connect, 5000);
-        }
+        console.log("Koneksi terputus, mencoba menghubungkan kembali...");
+        
+        // Logika Reconnect Manual
+        setTimeout(connect, 5000); 
     };
 
+    // Handler jika pesan masuk
     client.onMessageArrived = (message) => {
-        console.log("Message Arrived: " + message.payloadString);
         try {
             const data = JSON.parse(message.payloadString);
-            
-            // Update UI
             document.getElementById("temp").innerText = data.temp.toFixed(1);
             document.getElementById("hum").innerText = data.hum;
             
@@ -169,21 +142,45 @@
                 lampText.innerText = "ON (HEATING)";
                 lampText.style.color = "#2ecc71";
                 lampIcon.innerText = "💡";
-                lampIcon.className = "lamp-on";
             } else {
                 lampText.innerText = "OFF (IDLE)";
                 lampText.style.color = "#d63031";
                 lampIcon.innerText = "⚫";
-                lampIcon.className = "lamp-off";
             }
-
             document.getElementById("time").innerText = new Date().toLocaleTimeString();
         } catch (e) {
-            console.error("Parsing error", e);
+            console.error("Gagal memproses data JSON:", e);
         }
     };
 
-    // Mulai Koneksi
+    function connect() {
+        console.log("Menghubungkan ke MQTT...");
+        // Menghapus properti 'reconnect' yang menyebabkan error
+        const options = {
+            useSSL: true, 
+            timeout: 3,
+            keepAliveInterval: 30,
+            onSuccess: onConnect,
+            onFailure: onConnectFail
+        };
+        client.connect(options);
+    }
+
+    function onConnect() {
+        console.log("Terhubung!");
+        document.getElementById("mqtt_status").innerText = "CONNECTED";
+        document.getElementById("mqtt_status").classList.add("connected");
+        client.subscribe(TOPIC);
+    }
+
+    function onConnectFail(e) {
+        console.log("Gagal Terhubung:", e.errorMessage);
+        document.getElementById("mqtt_status").innerText = "FAILED - RETRYING";
+        // Coba lagi jika gagal
+        setTimeout(connect, 5000);
+    }
+
+    // Jalankan fungsi koneksi pertama kali
     connect();
 </script>
 
