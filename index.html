@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Incubator Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            color: #333;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 25px;
+            font-weight: 600;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 25px;
+            margin-top: 30px;
+        }
+        .status-card {
+            background-color: #ecf0f1;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            border-left: 5px solid transparent;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .status-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+        }
+        .status-card.temperature { border-left-color: #e74c3c; } /* Merah */
+        .status-card.humidity { border-left-color: #3498db; }    /* Biru */
+        .status-card.lamp-ON { border-left-color: #2ecc71; }     /* Hijau */
+        .status-card.lamp-OFF { border-left-color: #f39c12; }    /* Kuning */
+        
+        .status-card h2 {
+            font-size: 1.2em;
+            color: #34495e;
+            margin-bottom: 10px;
+            font-weight: 400;
+        }
+        .status-card p {
+            font-size: 2.5em;
+            font-weight: 600;
+            margin: 0;
+            line-height: 1;
+        }
+        .footer {
+            margin-top: 40px;
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }
+        .connection-status {
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #888;
+        }
+        .connection-status span {
+            font-weight: 600;
+            color: #e74c3c; /* Default: Disconnected */
+        }
+        .connection-status span.connected {
+            color: #2ecc71; /* Connected */
+        }
+
+        /* Ikon sederhana */
+        .icon {
+            font-size: 1.8em;
+            margin-bottom: 10px;
+            color: #7f8c8d;
+        }
+        .status-card.temperature .icon { color: #e74c3c; }
+        .status-card.humidity .icon { color: #3498db; }
+        .status-card.lamp-ON .icon { color: #2ecc71; }
+        .status-card.lamp-OFF .icon { color: #f39c12; }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Smart Incubator Dashboard 🐣</h1>
+        <div class="connection-status">
+            MQTT Status: <span id="mqtt_status">Disconnected</span>
+        </div>
+        <div class="status-grid">
+            <div class="status-card temperature">
+                <span class="icon">🌡️</span>
+                <h2>Temperature</h2>
+                <p><span id="temperature">--</span> °C</p>
+            </div>
+            <div class="status-card humidity">
+                <span class="icon">💧</span>
+                <h2>Humidity</h2>
+                <p><span id="humidity">--</span> %</p>
+            </div>
+            <div class="status-card lamp" id="lamp-card">
+                <span class="icon" id="lamp-icon">💡</span>
+                <h2>Lamp Status</h2>
+                <p><span id="lamp_status">--</span></p>
+            </div>
+        </div>
+        <div class="footer">
+            Last updated: <span id="last_update">N/A</span>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+
+    <script>
+        // === MQTT Configuration ===
+        const HOST = "broker.hivemq.com"; // Ganti jika kamu pakai broker lain
+        const PORT = 8000; // Port untuk koneksi WebSocket (HiveMQ default)
+        const CLIENT_ID = "WebAppClient_" + parseInt(Math.random() * 100);
+        const TOPIC = "incubator/data";
+
+        let client;
+
+        function connectMQTT() {
+            client = new Paho.MQTT.Client(HOST, PORT, CLIENT_ID);
+
+            client.onConnectionLost = onConnectionLost;
+            client.onMessageArrived = onMessageArrived;
+
+            client.connect({
+                onSuccess: onConnect,
+                onFailure: onFailure,
+                useSSL: false // Set true jika broker mendukung WSS
+            });
+        }
+
+        function onConnect() {
+            console.log("Connected to MQTT Broker.");
+            document.getElementById('mqtt_status').textContent = 'Connected';
+            document.getElementById('mqtt_status').classList.add('connected');
+            client.subscribe(TOPIC);
+            console.log("Subscribed to topic: " + TOPIC);
+        }
+
+        function onFailure(responseObject) {
+            console.log("Failed to connect: " + responseObject.errorMessage);
+            document.getElementById('mqtt_status').textContent = 'Disconnected';
+            document.getElementById('mqtt_status').classList.remove('connected');
+            // Coba lagi setelah beberapa detik
+            setTimeout(connectMQTT, 5000); 
+        }
+
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                console.log("Connection Lost: " + responseObject.errorMessage);
+                document.getElementById('mqtt_status').textContent = 'Disconnected';
+                document.getElementById('mqtt_status').classList.remove('connected');
+                // Coba lagi untuk terhubung
+                setTimeout(connectMQTT, 5000); 
+            }
+        }
+
+        function onMessageArrived(message) {
+            console.log("Message Arrived: " + message.payloadString);
+            try {
+                const data = JSON.parse(message.payloadString);
+                
+                document.getElementById('temperature').textContent = data.temp.toFixed(1);
+                document.getElementById('humidity').textContent = data.hum.toFixed(0);
+                document.getElementById('lamp_status').textContent = data.lamp;
+
+                // Update Lamp Card Style
+                const lampCard = document.getElementById('lamp-card');
+                const lampIcon = document.getElementById('lamp-icon');
+                lampCard.classList.remove('lamp-ON', 'lamp-OFF');
+                
+                if (data.lamp === "NYALA") {
+                    lampCard.classList.add('lamp-ON');
+                    lampIcon.textContent = '💡'; // Ikon lampu nyala
+                } else {
+                    lampCard.classList.add('lamp-OFF');
+                    lampIcon.textContent = '⚫'; // Ikon lampu mati
+                }
+
+                // Update Last Update Time
+                document.getElementById('last_update').textContent = new Date().toLocaleString();
+
+            } catch (e) {
+                console.error("Error parsing message or updating UI: ", e);
+            }
+        }
+
+        // Connect when the page loads
+        window.onload = connectMQTT;
+    </script>
+</body>
+</html>
